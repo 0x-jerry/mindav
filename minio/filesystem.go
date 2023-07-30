@@ -7,6 +7,7 @@ import (
 	"mindav/config"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -87,7 +88,7 @@ func (m *MinioFS) OpenFile(ctx context.Context, name string, flag int, perm os.F
 	}
 
 	log.Println("OpenFile success", name)
-	return &file{client: m, Object: object, name: name}, nil
+	return &file{fs: m, Object: object, name: name}, nil
 }
 
 func (m *MinioFS) RemoveAll(ctx context.Context, name string) error {
@@ -156,14 +157,28 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 func (m *MinioFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
 	name = path.Clean(name)
 
-	// if name == "" {
-	// 	return m.root, nil
-	// }
+	if name == "/" {
+		return m.root, nil
+	}
+
+	name = strings.TrimPrefix(name, "/")
 
 	stat, err := m.client.StatObject(ctx, m.BucketName, name, minio.StatObjectOptions{})
 
 	if err != nil {
 		log.Println("Stat failed", err, name)
+
+		if _, ok := err.(minio.ErrorResponse); ok {
+			return &fileInfo{minio.ObjectInfo{
+				Key:          name,
+				Size:         0,
+				LastModified: time.Now(),
+				ContentType:  "inode/directory",
+				ETag:         "",
+				StorageClass: "",
+			}}, nil
+		}
+
 		return nil, err
 	}
 

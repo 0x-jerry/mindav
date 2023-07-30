@@ -2,8 +2,12 @@ package minio
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"log"
 	"os"
+	"path"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -11,12 +15,12 @@ import (
 type file struct {
 	*minio.Object
 
-	client *MinioFS
-	name   string
+	fs   *MinioFS
+	name string
 }
 
 func (mo *file) Stat() (os.FileInfo, error) {
-	return mo.client.Stat(context.Background(), mo.name)
+	return mo.fs.Stat(context.Background(), mo.name)
 }
 
 func (mo *file) ReadFrom(r io.Reader) (n int64, err error) {
@@ -81,38 +85,34 @@ func (mo *file) Write(p []byte) (n int, err error) {
 }
 
 func (mo *file) Readdir(count int) (fileInfoList []os.FileInfo, err error) {
-	// ctx := context.Background()
-	// log.Trace("file readDir", toto.V{"name": mo.name})
+	ctx := context.Background()
+	name := path.Clean(mo.name)
 
-	// name, err := clearName(mo.name)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	if !strings.HasSuffix(name, "/") {
+		name = name + "/"
+	}
 
-	// if name != "" {
-	// 	if !strings.HasSuffix(name, "/") {
-	// 		name = name + "/"
-	// 	}
-	// }
+	name = strings.TrimLeft(name, "/")
 
-	// // List all objects from a bucket-name with a matching prefix.
-	// for object := range mo.m.client.ListObjects(ctx, mo.m.bucketName, minio.ListObjectsOptions{
-	// 	Prefix: name,
-	// }) {
-	// 	err = object.Err
-	// 	if err != nil {
-	// 		fmt.Println(object.Err)
-	// 		// return
-	// 		break
-	// 	}
+	// List all objects from a bucket-name with a matching prefix.
+	for object := range mo.fs.client.ListObjects(ctx, mo.fs.BucketName, minio.ListObjectsOptions{
+		Prefix: name,
+	}) {
+		err = object.Err
+		if err != nil {
+			fmt.Println(object.Err)
+			// return
+			break
+		}
 
-	// 	if object.StorageClass == "" && object.ETag == "" && object.Size == 0 {
-	// 		object.ContentType = "inode/directory"
-	// 	}
+		if object.StorageClass == "" && object.ETag == "" && object.Size == 0 {
+			object.ContentType = "inode/directory"
+		}
 
-	// 	fileInfoList = append(fileInfoList, &fileInfo{object})
-	// }
+		fileInfoList = append(fileInfoList, &fileInfo{object})
+	}
 
-	// return fileInfoList, err
-	return nil, nil
+	log.Println("Listdir", name, fileInfoList)
+
+	return fileInfoList, err
 }

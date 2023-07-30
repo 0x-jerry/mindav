@@ -27,8 +27,7 @@ func main() {
 
 	dav := webdav.New()
 
-	WebDAVAny(r, "/", dav.Handler)
-	// WebDAVAny(r, "/*sub", dav.Handler)
+	WebDAVAny(r, "/*sub", dav.Handler)
 
 	r.Run(":" + port)
 }
