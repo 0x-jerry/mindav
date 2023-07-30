@@ -26,5 +26,5 @@ func New() *Server {
 }
 
 func (s *Server) Handler(ctx *gin.Context) {
-
+	s.server.ServeHTTP(ctx.Writer, ctx.Request)
 }
