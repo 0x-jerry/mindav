@@ -31,6 +31,7 @@ func init() {
 
 	Conf.Minio = Minio{
 		Endpoint:        viper.GetString("minio.endpoint"),
+		BucketName:      viper.GetString("minio.bucketName"),
 		SSL:             viper.GetBool("minio.tls"),
 		AccessKey:       viper.GetString("minio.accessKey"),
 		SecretAccessKey: viper.GetString("minio.secretAccessKey"),

@@ -8,6 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var missingMethods = []string{
+	"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK",
+}
+
 func main() {
 	port := config.Conf.Port
 
@@ -24,17 +28,14 @@ func main() {
 	dav := webdav.New()
 
 	WebDAVAny(r, "/", dav.Handler)
+	// WebDAVAny(r, "/*sub", dav.Handler)
 
 	r.Run(":" + port)
 }
 
 func WebDAVAny(s *gin.Engine, relativePath string, handlers ...gin.HandlerFunc) {
 	s.Any(relativePath, handlers...)
-	s.Handle("PROPFIND", relativePath, handlers...)
-	s.Handle("PROPPATCH", relativePath, handlers...)
-	s.Handle("MKCOL", relativePath, handlers...)
-	s.Handle("COPY", relativePath, handlers...)
-	s.Handle("MOVE", relativePath, handlers...)
-	s.Handle("LOCK", relativePath, handlers...)
-	s.Handle("UNLOCK", relativePath, handlers...)
+	for _, v := range missingMethods {
+		s.Handle(v, relativePath, handlers...)
+	}
 }
