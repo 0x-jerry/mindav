@@ -24,7 +24,7 @@ type MinioFS struct {
 	root   *fileInfo
 }
 
-func New() *MinioFS {
+func NewFS() *MinioFS {
 	m := MinioFS{
 		Minio: config.Conf.Minio,
 		root: &fileInfo{minio.ObjectInfo{

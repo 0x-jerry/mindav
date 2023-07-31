@@ -14,7 +14,7 @@ type Server struct {
 func New() *Server {
 
 	handler := webdav.Handler{
-		FileSystem: minio.New(),
+		FileSystem: minio.NewFS(),
 		LockSystem: webdav.NewMemLS(),
 	}
 
