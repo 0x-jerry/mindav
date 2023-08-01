@@ -158,10 +158,6 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 func (m *MinioFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
 	name = cleanPathName(name)
 
-	if name == "" {
-		return m.root, nil
-	}
-
 	stat, err := m.client.StatObject(ctx, m.BucketName, name, minio.StatObjectOptions{})
 
 	if err != nil {

@@ -10,5 +10,9 @@ func cleanPathName(name string) string {
 
 	name = strings.TrimPrefix(name, "/")
 
+	if name == "" {
+		return "/"
+	}
+
 	return name
 }
