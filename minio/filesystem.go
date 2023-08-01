@@ -7,7 +7,6 @@ import (
 	"mindav/config"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -60,11 +59,13 @@ func (m *MinioFS) initialize() error {
 }
 
 func (m *MinioFS) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
-	name = path.Clean(name)
+	name = cleanPathName(name)
 
 	emptyFile := bytes.NewBuffer([]byte{})
 
-	_, err := m.client.PutObject(ctx, m.BucketName, name, emptyFile, int64(emptyFile.Len()), minio.PutObjectOptions{
+	emptyFilePath := path.Join(name, KEEP_FILE_NAME)
+
+	_, err := m.client.PutObject(ctx, m.BucketName, emptyFilePath, emptyFile, int64(emptyFile.Len()), minio.PutObjectOptions{
 		ContentType: KEEP_FILE_CONTENT_TYPE,
 	})
 
@@ -78,7 +79,7 @@ func (m *MinioFS) Mkdir(ctx context.Context, name string, perm os.FileMode) erro
 }
 
 func (m *MinioFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
-	name = path.Clean(name)
+	name = cleanPathName(name)
 
 	object, err := m.client.GetObject(ctx, m.BucketName, name, minio.GetObjectOptions{})
 
@@ -92,7 +93,7 @@ func (m *MinioFS) OpenFile(ctx context.Context, name string, flag int, perm os.F
 }
 
 func (m *MinioFS) RemoveAll(ctx context.Context, name string) error {
-	name = path.Clean(name)
+	name = cleanPathName(name)
 
 	objectChan := make(chan minio.ObjectInfo)
 
@@ -127,8 +128,8 @@ func (m *MinioFS) RemoveAll(ctx context.Context, name string) error {
 }
 
 func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
-	oldName = path.Clean(oldName)
-	newName = path.Clean(newName)
+	oldName = cleanPathName(oldName)
+	newName = cleanPathName(newName)
 
 	dest := minio.CopyDestOptions{
 		Bucket: m.BucketName,
@@ -155,13 +156,11 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 }
 
 func (m *MinioFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
-	name = path.Clean(name)
+	name = cleanPathName(name)
 
-	if name == "/" {
+	if name == "" {
 		return m.root, nil
 	}
-
-	name = strings.TrimPrefix(name, "/")
 
 	stat, err := m.client.StatObject(ctx, m.BucketName, name, minio.StatObjectOptions{})
 
