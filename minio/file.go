@@ -24,60 +24,18 @@ func (mo *file) Stat() (os.FileInfo, error) {
 }
 
 func (mo *file) ReadFrom(r io.Reader) (n int64, err error) {
-	// ctx := context.Background()
+	ctx := context.Background()
 
-	// // memory mode
-	// if config.GetBool("webdav.memory_upload_mode") {
-	// 	info, err := mo.m.client.PutObject(ctx, mo.m.bucketName, strings.TrimPrefix(mo.name, "/"), r, -1, minio.PutObjectOptions{ContentType: "application/octet-stream"})
-	// 	if err != nil {
-	// 		return 0, log.Error(err, toto.V{"op": "ReadFrom", "name": mo.name})
-	// 	}
-	// 	n = info.Size
-	// 	fmt.Println("Successfully uploaded bytes: ", n)
-	// 	return n, nil
-	// }
+	_, err = mo.fs.client.PutObject(ctx, mo.fs.BucketName, strings.TrimPrefix(mo.name, "/"), r, -1, minio.PutObjectOptions{ContentType: "application/octet-stream"})
 
-	// // file mode
-	// tmpFilePath := path.Join(mo.m.uploadTmpPath, hash.Md5(mo.name))
-	// f, err := os.Create(tmpFilePath)
-	// if err != nil {
-	// 	return 0, err
-	// }
-	// defer f.Close()
-	// defer func(p string) {
-	// 	err = os.RemoveAll(p)
-	// 	if err != nil {
-	// 		_ = log.Error(err, toto.V{"op": "upload", "name": mo.name, "tempName": p})
-	// 	}
-	// }(tmpFilePath)
+	if err != nil {
+		log.Println("Upload failed", err)
+		return 0, err
+	}
 
-	// buf := make([]byte, 1024)
-	// for {
-	// 	// read a chunk
-	// 	n, err := r.Read(buf)
-	// 	if err != nil && err != io.EOF {
-	// 		return 0, err
-	// 	}
-	// 	if n == 0 {
-	// 		break
-	// 	}
+	log.Println("Successfully uploaded bytes: ", n)
 
-	// 	// write a chunk
-	// 	if _, err := f.Write(buf[:n]); err != nil {
-	// 		return 0, err
-	// 	}
-	// }
-	// info, err := mo.m.client.FPutObject(ctx, mo.m.bucketName, strings.TrimPrefix(mo.name, "/"), tmpFilePath, minio.PutObjectOptions{ContentType: "application/octet-stream"})
-	// if err != nil {
-	// 	return 0, log.Error(err, toto.V{"op": "ReadFrom", "name": mo.name})
-	// }
-	// n = info.Size
-
-	// log.Trace(hash.Md5(mo.name), toto.V{"op": "upload", "name": mo.name})
-
-	// fmt.Println("Successfully uploaded bytes: ", n)
-	// return n, nil
-	return 0, nil
+	return n, nil
 }
 
 func (mo *file) Write(p []byte) (n int, err error) {
