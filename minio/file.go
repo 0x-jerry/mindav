@@ -70,7 +70,5 @@ func (mo *file) Readdir(count int) (fileInfoList []os.FileInfo, err error) {
 		fileInfoList = append(fileInfoList, &fileInfo{object})
 	}
 
-	log.Println("Listdir", name, fileInfoList)
-
 	return fileInfoList, err
 }

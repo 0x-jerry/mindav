@@ -7,6 +7,7 @@ import (
 	"mindav/config"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -21,6 +22,7 @@ type MinioFS struct {
 	config.Minio
 	client *minio.Client
 	root   *fileInfo
+	dirs   map[string]bool
 }
 
 func NewFS() *MinioFS {
@@ -34,6 +36,7 @@ func NewFS() *MinioFS {
 			ETag:         "",
 			StorageClass: "",
 		}},
+		dirs: make(map[string]bool),
 	}
 
 	m.initialize()
@@ -95,25 +98,7 @@ func (m *MinioFS) OpenFile(ctx context.Context, name string, flag int, perm os.F
 func (m *MinioFS) RemoveAll(ctx context.Context, name string) error {
 	name = cleanPathName(name)
 
-	objectChan := make(chan minio.ObjectInfo)
-
-	go func() {
-		defer close(objectChan)
-
-		opts := minio.ListObjectsOptions{
-			Prefix:    name,
-			Recursive: true,
-		}
-
-		for object := range m.client.ListObjects(ctx, m.BucketName, opts) {
-			if object.Err != nil {
-				log.Println("[RemoveAll] ListObjects failed", name)
-			}
-
-			log.Println("Get removed object", object.Key)
-			objectChan <- object
-		}
-	}()
+	objectChan := m.getObjectsByPrefix(ctx, name)
 
 	for err := range m.client.RemoveObjects(ctx, m.BucketName, objectChan, minio.RemoveObjectsOptions{}) {
 		if err.Err != nil {
@@ -137,25 +122,32 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 	oldName = cleanPathName(oldName)
 	newName = cleanPathName(newName)
 
-	dest := minio.CopyDestOptions{
-		Bucket: m.BucketName,
-		Object: newName,
+	log.Println("Rename", oldName, newName)
+
+	objectChan := m.getObjectsByPrefix(ctx, oldName)
+
+	for obj := range objectChan {
+		oldKeyPath := obj.Key
+		newKeyPath := strings.Replace(oldName, oldName, newName, 1)
+
+		dest := minio.CopyDestOptions{
+			Bucket: m.BucketName,
+			Object: newKeyPath,
+		}
+
+		src := minio.CopySrcOptions{
+			Bucket: m.BucketName,
+			Object: oldKeyPath,
+		}
+
+		if _, err := m.client.CopyObject(ctx, dest, src); err != nil {
+			log.Println("Copy file failed", err)
+		}
+
+		log.Println("Copy file success.", oldName)
 	}
 
-	src := minio.CopySrcOptions{
-		Bucket: m.BucketName,
-		Object: oldName,
-	}
-
-	if _, err := m.client.CopyObject(ctx, dest, src); err != nil {
-		log.Println("Rename failed", err)
-		return err
-	}
-
-	if err := m.client.RemoveObject(ctx, m.BucketName, oldName, minio.RemoveObjectOptions{}); err != nil {
-		log.Println("Rename failed", err)
-		return err
-	}
+	m.RemoveAll(ctx, oldName)
 
 	log.Println("Rename success")
 	return nil
@@ -164,24 +156,96 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 func (m *MinioFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
 	name = cleanPathName(name)
 
+	if name == "/" {
+		name = ""
+	}
+
+	if m.isDir(ctx, name) {
+		return &fileInfo{minio.ObjectInfo{
+			Key:          name,
+			Size:         0,
+			LastModified: time.Now(),
+			ContentType:  "inode/directory",
+			ETag:         "",
+			StorageClass: "",
+		}}, nil
+	}
+
 	stat, err := m.client.StatObject(ctx, m.BucketName, name, minio.StatObjectOptions{})
 
 	if err != nil {
 		log.Println("Stat failed", err, name)
-
-		if _, ok := err.(minio.ErrorResponse); ok {
-			return &fileInfo{minio.ObjectInfo{
-				Key:          name,
-				Size:         0,
-				LastModified: time.Now(),
-				ContentType:  "inode/directory",
-				ETag:         "",
-				StorageClass: "",
-			}}, nil
-		}
-
-		return nil, err
+		return nil, os.ErrNotExist
 	}
 
 	return &fileInfo{stat}, nil
+}
+
+func (m *MinioFS) getObjectsByPrefix(ctx context.Context, prefix string) chan minio.ObjectInfo {
+	objectChan := make(chan minio.ObjectInfo)
+
+	go func() {
+		defer close(objectChan)
+
+		opts := minio.ListObjectsOptions{
+			Prefix:    prefix,
+			Recursive: true,
+		}
+
+		for object := range m.client.ListObjects(ctx, m.BucketName, opts) {
+			if object.Err != nil {
+				log.Println("ListObjects failed", prefix)
+			}
+
+			log.Println("Get object", object.Key)
+			objectChan <- object
+		}
+	}()
+
+	return objectChan
+}
+
+func (m *MinioFS) isDir(ctx context.Context, name string) bool {
+
+	if val, exists := m.dirs[name]; exists {
+		return val
+	}
+
+	objectChan := make(chan minio.ObjectInfo)
+
+	go func() {
+		defer close(objectChan)
+
+		opts := minio.ListObjectsOptions{
+			Prefix:       name,
+			Recursive:    false,
+			WithVersions: true,
+		}
+
+		for object := range m.client.ListObjects(ctx, m.BucketName, opts) {
+			if object.Err != nil {
+				log.Println("ListObjects failed", name)
+			}
+
+			log.Println("Get object", object.Key)
+			objectChan <- object
+		}
+	}()
+
+	count := 0
+	for obj := range objectChan {
+		if obj.Key != name {
+			count++
+		}
+
+		if obj.Err != nil {
+			log.Println("list dir error")
+		}
+	}
+
+	isDir := count != 0
+
+	m.dirs[name] = isDir
+
+	return isDir
 }
