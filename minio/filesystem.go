@@ -156,11 +156,7 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 func (m *MinioFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
 	name = cleanPathName(name)
 
-	if name == "/" {
-		name = ""
-	}
-
-	if m.isDir(ctx, name) {
+	if name == "/" || m.isDir(ctx, name) {
 		return &fileInfo{minio.ObjectInfo{
 			Key:          name,
 			Size:         0,
