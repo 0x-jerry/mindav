@@ -98,15 +98,19 @@ func (m *MinioFS) RemoveAll(ctx context.Context, name string) error {
 	objectChan := make(chan minio.ObjectInfo)
 
 	go func() {
+		defer close(objectChan)
+
 		opts := minio.ListObjectsOptions{
 			Prefix:    name,
-			Recursive: false,
+			Recursive: true,
 		}
 
 		for object := range m.client.ListObjects(ctx, m.BucketName, opts) {
 			if object.Err != nil {
 				log.Println("[RemoveAll] ListObjects failed", name)
 			}
+
+			log.Println("Get removed object", object.Key)
 			objectChan <- object
 		}
 	}()
@@ -117,6 +121,8 @@ func (m *MinioFS) RemoveAll(ctx context.Context, name string) error {
 			return err.Err
 		}
 	}
+
+	log.Println("RemoveAll all sub object")
 
 	if err := m.client.RemoveObject(ctx, m.BucketName, name, minio.RemoveObjectOptions{}); err != nil {
 		log.Println("RemoveAll failed", err)
