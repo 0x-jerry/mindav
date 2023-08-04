@@ -2,7 +2,7 @@ FROM golang:1.20 AS builder
 COPY go.mod /src/go.mod
 COPY go.sum /src/go.sum
 
-ENV GOPROXY=https://mirrors.aliyun.com/goproxy/
+# ENV GOPROXY=https://mirrors.aliyun.com/goproxy/
 # ENV CGO_ENABLED=0
 WORKDIR /src/
 
