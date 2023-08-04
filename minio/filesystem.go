@@ -128,7 +128,7 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 
 	for obj := range objectChan {
 		oldKeyPath := obj.Key
-		newKeyPath := strings.Replace(oldName, oldName, newName, 1)
+		newKeyPath := strings.Replace(oldKeyPath, oldName, newName, 1)
 
 		dest := minio.CopyDestOptions{
 			Bucket: m.BucketName,
@@ -144,7 +144,7 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 			log.Println("Copy file failed", err)
 		}
 
-		log.Println("Copy file success.", oldName)
+		log.Println("Copy file success.", oldKeyPath, "to", newKeyPath)
 	}
 
 	m.RemoveAll(ctx, oldName)
@@ -189,11 +189,12 @@ func (m *MinioFS) getObjectsByPrefix(ctx context.Context, prefix string) chan mi
 		}
 
 		for object := range m.client.ListObjects(ctx, m.BucketName, opts) {
+			log.Println("Get object", object.Key)
+
 			if object.Err != nil {
 				log.Println("ListObjects failed", prefix)
 			}
 
-			log.Println("Get object", object.Key)
 			objectChan <- object
 		}
 	}()
@@ -203,9 +204,9 @@ func (m *MinioFS) getObjectsByPrefix(ctx context.Context, prefix string) chan mi
 
 func (m *MinioFS) isDir(ctx context.Context, name string) bool {
 
-	if val, exists := m.dirs[name]; exists {
-		return val
-	}
+	// if val, exists := m.dirs[name]; exists {
+	// 	return val
+	// }
 
 	objectChan := make(chan minio.ObjectInfo)
 
@@ -215,7 +216,7 @@ func (m *MinioFS) isDir(ctx context.Context, name string) bool {
 		opts := minio.ListObjectsOptions{
 			Prefix:       name,
 			Recursive:    false,
-			WithVersions: true,
+			WithVersions: false,
 		}
 
 		for object := range m.client.ListObjects(ctx, m.BucketName, opts) {
@@ -230,6 +231,9 @@ func (m *MinioFS) isDir(ctx context.Context, name string) bool {
 
 	count := 0
 	for obj := range objectChan {
+		log.Println("Key:", obj.Key, "size:", obj.Size, "type:", obj.ContentType, "owner:", obj.Owner.ID)
+
+		// if (obj.Owner.ID)
 		if obj.Key != name {
 			count++
 		}
