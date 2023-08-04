@@ -1,0 +1,16 @@
+{
+    "app": {
+        "port": "8080",
+        "admin": {
+            "username": "admin",
+            "password": "password"
+        }
+    },
+    "minio": {
+        "endpoint": "web.server.com",
+        "ssl": true,
+        "bucketName": "webdav",
+        "accessKey": "accessKey",
+        "secretAccessKey": "secretAccessKey"
+    }
+}
