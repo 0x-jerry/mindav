@@ -114,6 +114,8 @@ func (m *MinioFS) RemoveAll(ctx context.Context, name string) error {
 		return err
 	}
 
+	m.resetDirCheck(name)
+
 	log.Println("RemoveAll success")
 	return nil
 }
@@ -147,6 +149,7 @@ func (m *MinioFS) Rename(ctx context.Context, oldName, newName string) error {
 		log.Println("Copy file success.", oldKeyPath, "to", newKeyPath)
 	}
 
+	m.resetDirCheck(newName)
 	m.RemoveAll(ctx, oldName)
 
 	log.Println("Rename success")
@@ -204,9 +207,9 @@ func (m *MinioFS) getObjectsByPrefix(ctx context.Context, prefix string) chan mi
 
 func (m *MinioFS) isDir(ctx context.Context, name string) bool {
 
-	// if val, exists := m.dirs[name]; exists {
-	// 	return val
-	// }
+	if val, exists := m.dirs[name]; exists {
+		return val
+	}
 
 	objectChan := make(chan minio.ObjectInfo)
 
@@ -233,8 +236,7 @@ func (m *MinioFS) isDir(ctx context.Context, name string) bool {
 	for obj := range objectChan {
 		log.Println("Key:", obj.Key, "size:", obj.Size, "type:", obj.ContentType, "owner:", obj.Owner.ID)
 
-		// if (obj.Owner.ID)
-		if obj.Key != name {
+		if obj.Owner.ID == "" {
 			count++
 		}
 
@@ -248,4 +250,12 @@ func (m *MinioFS) isDir(ctx context.Context, name string) bool {
 	m.dirs[name] = isDir
 
 	return isDir
+}
+
+func (m *MinioFS) resetDirCheck(keyName string) {
+	for key := range m.dirs {
+		if strings.HasPrefix(key, keyName) {
+			delete(m.dirs, key)
+		}
+	}
 }
