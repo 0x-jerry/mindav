@@ -180,29 +180,14 @@ func (m *MinioFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {
 	return &fileInfo{stat}, nil
 }
 
-func (m *MinioFS) getObjectsByPrefix(ctx context.Context, prefix string) chan minio.ObjectInfo {
-	objectChan := make(chan minio.ObjectInfo)
+func (m *MinioFS) getObjectsByPrefix(ctx context.Context, prefix string) <-chan minio.ObjectInfo {
+	opts := minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	}
 
-	go func() {
-		defer close(objectChan)
+	return m.client.ListObjects(ctx, m.BucketName, opts)
 
-		opts := minio.ListObjectsOptions{
-			Prefix:    prefix,
-			Recursive: true,
-		}
-
-		for object := range m.client.ListObjects(ctx, m.BucketName, opts) {
-			log.Println("Get object", object.Key)
-
-			if object.Err != nil {
-				log.Println("ListObjects failed", prefix)
-			}
-
-			objectChan <- object
-		}
-	}()
-
-	return objectChan
 }
 
 func (m *MinioFS) isDir(ctx context.Context, name string) bool {
