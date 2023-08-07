@@ -19,6 +19,8 @@ WORKDIR /mindav/
 
 # Run the server binary.
 
+ENV GIN_MODE=release
+
 ENTRYPOINT ["/mindav/mindav"]
 
 EXPOSE 8080
