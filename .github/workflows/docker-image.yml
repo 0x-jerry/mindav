@@ -2,12 +2,24 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
+    tags:
+      - V*
 
 jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: 0xjerry/mindav
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
@@ -22,4 +34,4 @@ jobs:
         with:
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: 0xjerry/mindav:latest
+          tags: ${{ steps.meta.outputs.tags }}
