@@ -26,12 +26,16 @@ func (mo *file) Stat() (os.FileInfo, error) {
 func (mo *file) ReadFrom(r io.Reader) (n int64, err error) {
 	ctx := context.Background()
 
-	_, err = mo.fs.client.PutObject(ctx, mo.fs.BucketName, strings.TrimPrefix(mo.name, "/"), r, -1, minio.PutObjectOptions{ContentType: "application/octet-stream"})
+	log.Println("Start uploading:", mo.name)
+
+	info, err := mo.fs.client.PutObject(ctx, mo.fs.BucketName, strings.TrimPrefix(mo.name, "/"), r, -1, minio.PutObjectOptions{ContentType: "application/octet-stream"})
 
 	if err != nil {
 		log.Println("Upload failed", err)
 		return 0, err
 	}
+
+	n = info.Size
 
 	log.Println("Successfully uploaded bytes: ", n)
 
