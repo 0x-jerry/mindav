@@ -11,7 +11,7 @@ minio + webdav
 
 Use docker compose:
 
-```
+```yaml
 version: "3"
 services:
 
