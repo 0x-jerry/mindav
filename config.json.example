@@ -4,7 +4,8 @@
         "admin": {
             "username": "admin",
             "password": "password"
-        }
+        },
+        "uploadMode": "file"
     },
     "minio": {
         "endpoint": "web.server.com",
