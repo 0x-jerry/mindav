@@ -26,7 +26,7 @@ func init() {
 	viper.SetDefault("app.port", "8080")
 	viper.SetDefault("app.admin.username", "admin")
 	viper.SetDefault("app.admin.password", "password")
-	viper.SetDefault("app.uploadMode", "memory")
+	viper.SetDefault("app.uploadMode", "file")
 
 	viper.ReadInConfig()
 
