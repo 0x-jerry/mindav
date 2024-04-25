@@ -6,7 +6,7 @@ toolchain go1.22.0
 
 require (
 	github.com/gin-gonic/gin v1.9.1
-	github.com/minio/minio-go/v7 v7.0.69
+	github.com/minio/minio-go/v7 v7.0.70
 	github.com/spf13/viper v1.18.2
 	golang.org/x/net v0.25.0
 )
