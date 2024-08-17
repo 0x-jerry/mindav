@@ -44,3 +44,10 @@ Example `./config.json`:
   }
 }
 ```
+
+## Development
+
+```sh
+go install github.com/air-verse/air@latest
+air
+```
