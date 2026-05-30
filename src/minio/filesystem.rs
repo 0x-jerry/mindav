@@ -164,6 +164,83 @@ impl MinioFs {
         objects
     }
 
+    async fn list_dir_entries(&self, prefix: &str) -> Vec<Box<dyn DavDirEntry>> {
+        let mut key = prefix.to_string();
+        if !prefix.is_empty() {
+            key = format!("{}/", prefix);
+        }
+
+        let mut entries: Vec<Box<dyn DavDirEntry>> = Vec::new();
+        let mut continuation_token: Option<String> = None;
+
+        loop {
+            let mut builder = self
+                .client
+                .list_objects_v2()
+                .bucket(&self.bucket)
+                .prefix(&key)
+                .delimiter("/".to_string());
+
+            if let Some(ref token) = continuation_token {
+                builder = builder.continuation_token(token);
+            }
+
+            let resp = builder.send().await;
+
+            match resp {
+                Ok(output) => {
+                    for cp in output.common_prefixes().iter() {
+                        let Some(key) = cp.prefix() else { continue };
+                        let entry = MinioDirEntry {
+                            key: key.to_string(),
+                            size: 0,
+                            last_modified: SystemTime::now(),
+                            is_dir: true,
+                        };
+                        entries.push(Box::new(entry));
+                    }
+
+                    for obj in output.contents().iter() {
+                        let k = obj.key().unwrap_or_default().to_string();
+                        if k == KEEP_FILE_NAME || k.ends_with(&format!("/{}", KEEP_FILE_NAME)) {
+                            continue;
+                        }
+                        if k == key || k == format!("{}/", key) {
+                            continue;
+                        }
+                        let entry = MinioDirEntry {
+                            key: k,
+                            size: obj.size().unwrap_or(0) as u64,
+                            last_modified: obj
+                                .last_modified()
+                                .map(datetime_to_systemtime)
+                                .unwrap_or_else(SystemTime::now),
+                            is_dir: false,
+                        };
+                        entries.push(Box::new(entry));
+                    }
+
+                    if output.is_truncated() == Some(true) {
+                        continuation_token =
+                            output.next_continuation_token().map(|s| s.to_string());
+                    } else {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        prefix = %key,
+                        error = ?e,
+                        "ListDirEntries failed"
+                    );
+                    break;
+                }
+            }
+        }
+
+        entries
+    }
+
     async fn remove_all(&self, name: &str) -> FsResult<()> {
         let objects = self.list_objects_by_prefix(name).await;
 
@@ -275,35 +352,7 @@ impl DavFileSystem for MinioFs {
     ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         Box::pin(async move {
             let name = Self::get_path(path);
-
-            let objects = self.list_objects_by_prefix(&name).await;
-            let mut entries: Vec<Box<dyn DavDirEntry>> = Vec::new();
-
-            for obj in objects {
-                let k = obj.key().unwrap_or_default().to_string();
-
-                if k == KEEP_FILE_NAME {
-                    continue;
-                }
-
-                let is_dir_val =
-                    obj.storage_class().is_none() && obj.e_tag().is_none() && obj.size() == Some(0);
-
-                tracing::info!("key: {}, is_dir {}", k, is_dir_val);
-
-                let entry = MinioDirEntry {
-                    key: k,
-                    size: obj.size().unwrap_or(0) as u64,
-                    last_modified: obj
-                        .last_modified()
-                        .map(datetime_to_systemtime)
-                        .unwrap_or_else(SystemTime::now),
-                    is_dir: is_dir_val,
-                };
-
-                entries.push(Box::new(entry));
-            }
-
+            let entries = self.list_dir_entries(&name).await;
             let stream = futures_util::stream::iter(entries.into_iter().map(Ok));
             Ok(Box::pin(stream) as FsStream<Box<dyn DavDirEntry>>)
         })
