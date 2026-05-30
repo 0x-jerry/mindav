@@ -1,5 +1,10 @@
 tmp
+target
 .github
 .vscode
 *.md
 config.json
+*.go
+go.mod
+go.sum
+.air.toml

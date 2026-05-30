@@ -1,25 +1,14 @@
-FROM golang:1.24 AS builder
-COPY go.mod /src/go.mod
-COPY go.sum /src/go.sum
-
-# ENV GOPROXY=https://mirrors.aliyun.com/goproxy/
-# ENV CGO_ENABLED=0
-WORKDIR /src/
-
-RUN go mod download
-
-COPY . /src/
-RUN go build -o /src/mindav /src/main.go
+FROM rust:1-slim-bookworm AS builder
+WORKDIR /src
+COPY . .
+RUN cargo build --release
 
 FROM debian:stable-slim
-# Copy our static executable.
-COPY --from=builder /src/mindav /mindav/mindav
+COPY --from=builder /src/target/release/mindav /mindav/mindav
 
 WORKDIR /mindav/
 
-# Run the server binary.
-
-ENV GIN_MODE=release
+ENV RUST_LOG=info
 
 ENTRYPOINT ["/mindav/mindav"]
 
