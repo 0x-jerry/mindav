@@ -120,7 +120,7 @@ impl DavFile for MinioFile {
     }
 
     fn flush(&mut self) -> FsFuture<'_, ()> {
-        if !self.is_open_for_write || self.write_buf.is_empty() {
+        if !self.is_open_for_write {
             return Box::pin(async move { Ok(()) });
         }
 
