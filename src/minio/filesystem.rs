@@ -294,7 +294,7 @@ impl DavFileSystem for MinioFs {
                             .unwrap_or_else(SystemTime::now),
                         is_dir: false,
                     },
-                    Err(_) => MinioMetaData::new_dir(name.clone()),
+                    Err(_) => return Err(FsError::NotFound),
                 };
 
                 let file = MinioFile::new_read(
@@ -362,7 +362,7 @@ impl DavFileSystem for MinioFs {
 
     fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let name = Self::get_path(path).trim_start_matches('/').to_string();
+            let name = Self::get_path(path);
             let keep_path = if name.is_empty() {
                 KEEP_FILE_NAME.to_string()
             } else {
@@ -402,7 +402,7 @@ impl DavFileSystem for MinioFs {
 
     fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let name = Self::get_path(path).trim_start_matches('/').to_string();
+            let name = Self::get_path(path);
             let result = self
                 .client
                 .delete_object()
@@ -426,8 +426,8 @@ impl DavFileSystem for MinioFs {
 
     fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let old_name = Self::get_path(from).trim_start_matches('/').to_string();
-            let new_name = Self::get_path(to).trim_start_matches('/').to_string();
+            let old_name = Self::get_path(from);
+            let new_name = Self::get_path(to);
 
             tracing::info!("Rename: {} -> {}", old_name, new_name);
 
@@ -465,8 +465,8 @@ impl DavFileSystem for MinioFs {
 
     fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let src_name = Self::get_path(from).trim_start_matches('/').to_string();
-            let dst_name = Self::get_path(to).trim_start_matches('/').to_string();
+            let src_name = Self::get_path(from);
+            let dst_name = Self::get_path(to);
 
             let objects = self.list_objects_by_prefix(&src_name).await;
 
