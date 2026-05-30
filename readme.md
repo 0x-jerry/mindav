@@ -1,29 +1,25 @@
 # mindav
 
-Inspired by [mindav]
+MinIO + WebDAV bridge. Exposes a WebDAV server backed by MinIO/S3 storage.
 
-minio + webdav
-
-[mindav]: https://github.com/totoval/mindav
+Inspired by [totoval/mindav](https://github.com/totoval/mindav).
 
 ## Usage
 
-Use docker compose:
+### Docker
 
 ```yaml
 version: '3'
 services:
   mindav:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/0xjerry/mindav:latest
     volumes:
       - ./config.json:/mindav/config.json
     ports:
       - '9000:8080'
 ```
 
-Example `./config.json`:
+### Example `config.json`
 
 ```json
 {
@@ -48,6 +44,12 @@ Example `./config.json`:
 ## Development
 
 ```sh
-go install github.com/air-verse/air@latest
-air
+cargo run
+```
+
+For hot-reload during development:
+
+```sh
+cargo install cargo-watch
+cargo watch -x run
 ```
