@@ -6,7 +6,6 @@ use bytes::{Buf, Bytes};
 use dav_server::fs::{DavFile, DavMetaData, FsFuture, FsResult};
 use md5::{Digest, Md5};
 
-use super::clean_path_name;
 use super::fileinfo::MinioMetaData;
 
 #[derive(Debug)]
@@ -30,8 +29,7 @@ impl MinioFile {
         upload_mode: String,
         metadata: MinioMetaData,
     ) -> FsResult<Self> {
-        let key = clean_path_name(&name);
-        let result = client.get_object().bucket(&bucket).key(&key).send().await;
+        let result = client.get_object().bucket(&bucket).key(&name).send().await;
 
         let data = match result {
             Ok(output) => output
@@ -128,7 +126,7 @@ impl DavFile for MinioFile {
 
         let client = self.client.clone();
         let bucket = self.bucket.clone();
-        let name = clean_path_name(&self.name);
+        let name = self.name.clone();
         let upload_mode = self.upload_mode.clone();
         let data = std::mem::take(&mut self.write_buf);
 

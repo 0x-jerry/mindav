@@ -1,6 +1,5 @@
 mod config;
 mod minio;
-mod utils;
 
 use axum::{
     extract::{Request, State},
@@ -69,11 +68,7 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn handle_dav(
-    State(state): State<AppState>,
-    auth: AuthBasic,
-    req: Request,
-) -> Response {
+async fn handle_dav(State(state): State<AppState>, auth: AuthBasic, req: Request) -> Response {
     let AuthBasic((user, pass)) = auth;
     if user == state.admin_name && pass.as_deref() == Some(&state.admin_password) {
         let resp = state.dav.handle(req).await;
@@ -81,6 +76,10 @@ async fn handle_dav(
         let body = axum::body::Body::new(body);
         Response::from_parts(parts, body)
     } else {
-        (StatusCode::UNAUTHORIZED, [("WWW-Authenticate", "Basic realm=\"mindav\"")]).into_response()
+        (
+            StatusCode::UNAUTHORIZED,
+            [("WWW-Authenticate", "Basic realm=\"mindav\"")],
+        )
+            .into_response()
     }
 }

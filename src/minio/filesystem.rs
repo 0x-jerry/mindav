@@ -14,9 +14,11 @@ use dav_server::fs::{
 };
 use tokio::sync::RwLock;
 
+use crate::minio::dir::MinioDirEntry;
+
 use super::file::MinioFile;
 use super::fileinfo::MinioMetaData;
-use super::{clean_path_name, KEEP_FILE_CONTENT_TYPE, KEEP_FILE_NAME};
+use super::{KEEP_FILE_CONTENT_TYPE, KEEP_FILE_NAME};
 
 #[derive(Clone)]
 pub struct MinioFs {
@@ -78,12 +80,12 @@ impl MinioFs {
             }
         }
 
-        let key = clean_path_name(name);
+        let key = name.trim_start_matches('/');
         let resp = self
             .client
             .list_objects_v2()
             .bucket(&self.bucket)
-            .prefix(&key)
+            .prefix(key)
             .delimiter("/".to_string())
             .send()
             .await;
@@ -118,7 +120,7 @@ impl MinioFs {
     }
 
     async fn list_objects_by_prefix(&self, prefix: &str) -> Vec<aws_sdk_s3::types::Object> {
-        let key = clean_path_name(prefix);
+        let key = prefix.trim_start_matches('/');
         let mut objects = Vec::new();
         let mut continuation_token: Option<String> = None;
 
@@ -127,7 +129,7 @@ impl MinioFs {
                 .client
                 .list_objects_v2()
                 .bucket(&self.bucket)
-                .prefix(&key);
+                .prefix(key);
 
             if let Some(ref token) = continuation_token {
                 builder = builder.continuation_token(token);
@@ -141,9 +143,8 @@ impl MinioFs {
                         objects.push(obj.clone());
                     }
                     if output.is_truncated() == Some(true) {
-                        continuation_token = output
-                            .next_continuation_token()
-                            .map(|s| s.to_string());
+                        continuation_token =
+                            output.next_continuation_token().map(|s| s.to_string());
                     } else {
                         break;
                     }
@@ -219,10 +220,9 @@ impl DavFileSystem for MinioFs {
     ) -> FsFuture<'a, Box<dyn DavFile>> {
         Box::pin(async move {
             let name = Self::get_path(path);
-            let key = clean_path_name(&name);
 
             if options.write || options.create {
-                let metadata = MinioMetaData::new_dir(format!("/{}", key));
+                let metadata = MinioMetaData::new_dir(format!("/{}", name));
                 let file = MinioFile::new_write(
                     self.client.clone(),
                     self.bucket.clone(),
@@ -236,7 +236,7 @@ impl DavFileSystem for MinioFs {
                     .client
                     .head_object()
                     .bucket(&self.bucket)
-                    .key(&key)
+                    .key(&name)
                     .send()
                     .await;
 
@@ -250,7 +250,7 @@ impl DavFileSystem for MinioFs {
                             .unwrap_or_else(SystemTime::now),
                         is_dir: false,
                     },
-                    Err(_) => MinioMetaData::new_dir(key.clone()),
+                    Err(_) => MinioMetaData::new_dir(name.clone()),
                 };
 
                 let file = MinioFile::new_read(
@@ -274,15 +274,14 @@ impl DavFileSystem for MinioFs {
     ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         Box::pin(async move {
             let name = Self::get_path(path);
-            let mut prefix = clean_path_name(&name);
-
-            if !prefix.ends_with('/') && prefix != "/" {
-                prefix = format!("{}/", prefix);
-            }
-
-            if prefix == "/" {
-                prefix = String::new();
-            }
+            let prefix = name.trim_start_matches('/');
+            let prefix = if prefix.is_empty() {
+                String::new()
+            } else if prefix.ends_with('/') {
+                prefix.to_string()
+            } else {
+                format!("{}/", prefix)
+            };
 
             let objects = self.list_objects_by_prefix(&prefix).await;
             let mut entries: Vec<Box<dyn DavDirEntry>> = Vec::new();
@@ -293,9 +292,8 @@ impl DavFileSystem for MinioFs {
                     continue;
                 }
 
-                let is_dir_val = obj.storage_class().is_none()
-                    && obj.e_tag().is_none()
-                    && obj.size() == Some(0);
+                let is_dir_val =
+                    obj.storage_class().is_none() && obj.e_tag().is_none() && obj.size() == Some(0);
 
                 let entry = MinioDirEntry {
                     key: k,
@@ -318,9 +316,8 @@ impl DavFileSystem for MinioFs {
     fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
         Box::pin(async move {
             let name = Self::get_path(path);
-            let key = clean_path_name(&name);
 
-            if key == "/" || self.is_dir(&name).await {
+            if name.is_empty() || name == "/" || self.is_dir(&name).await {
                 return Ok(Box::new(MinioMetaData::new_dir(name)) as Box<dyn DavMetaData>);
             }
 
@@ -328,7 +325,7 @@ impl DavFileSystem for MinioFs {
                 .client
                 .head_object()
                 .bucket(&self.bucket)
-                .key(&key)
+                .key(&name)
                 .send()
                 .await;
 
@@ -354,8 +351,8 @@ impl DavFileSystem for MinioFs {
 
     fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let name = clean_path_name(&Self::get_path(path));
-            let keep_path = if name == "/" {
+            let name = Self::get_path(path).trim_start_matches('/').to_string();
+            let keep_path = if name.is_empty() {
                 KEEP_FILE_NAME.to_string()
             } else {
                 format!("{}/{}", name, KEEP_FILE_NAME)
@@ -378,7 +375,7 @@ impl DavFileSystem for MinioFs {
                     Ok(())
                 }
                 Err(e) => {
-                    tracing::error!("Mkdir failed: {}", e);
+                    tracing::error!("Mkdir failed on {}: {:?}", keep_path, e);
                     Err(FsError::GeneralFailure)
                 }
             }
@@ -387,14 +384,14 @@ impl DavFileSystem for MinioFs {
 
     fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let name = clean_path_name(&Self::get_path(path));
+            let name = Self::get_path(path).trim_start_matches('/').to_string();
             self.remove_all(&name).await
         })
     }
 
     fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let name = clean_path_name(&Self::get_path(path));
+            let name = Self::get_path(path).trim_start_matches('/').to_string();
             let result = self
                 .client
                 .delete_object()
@@ -418,8 +415,8 @@ impl DavFileSystem for MinioFs {
 
     fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let old_name = clean_path_name(&Self::get_path(from));
-            let new_name = clean_path_name(&Self::get_path(to));
+            let old_name = Self::get_path(from).trim_start_matches('/').to_string();
+            let new_name = Self::get_path(to).trim_start_matches('/').to_string();
 
             tracing::info!("Rename: {} -> {}", old_name, new_name);
 
@@ -458,8 +455,8 @@ impl DavFileSystem for MinioFs {
 
     fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let src_name = clean_path_name(&Self::get_path(from));
-            let dst_name = clean_path_name(&Self::get_path(to));
+            let src_name = Self::get_path(from).trim_start_matches('/').to_string();
+            let dst_name = Self::get_path(to).trim_start_matches('/').to_string();
 
             let objects = self.list_objects_by_prefix(&src_name).await;
 
@@ -489,38 +486,5 @@ impl DavFileSystem for MinioFs {
             tracing::info!("Copy success");
             Ok(())
         })
-    }
-}
-
-struct MinioDirEntry {
-    key: String,
-    size: u64,
-    last_modified: SystemTime,
-    is_dir: bool,
-}
-
-impl DavDirEntry for MinioDirEntry {
-    fn name(&self) -> Vec<u8> {
-        let name = if self.is_dir {
-            self.key.trim_matches('/').to_string()
-        } else {
-            self.key.clone()
-        };
-
-        if let Some(pos) = name.rfind('/') {
-            name.as_bytes()[(pos + 1)..].to_vec()
-        } else {
-            name.as_bytes().to_vec()
-        }
-    }
-
-    fn metadata(&self) -> FsFuture<'_, Box<dyn DavMetaData>> {
-        let metadata = MinioMetaData {
-            key: self.key.clone(),
-            size: self.size,
-            last_modified: self.last_modified,
-            is_dir: self.is_dir,
-        };
-        Box::pin(async move { Ok(Box::new(metadata) as Box<dyn DavMetaData>) })
     }
 }

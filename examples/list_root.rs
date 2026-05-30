@@ -48,10 +48,7 @@ async fn main() {
 
     let mut continuation_token: Option<String> = None;
     loop {
-        let mut builder = client
-            .list_objects_v2()
-            .bucket(&c.bucket_name)
-            .prefix("");
+        let mut builder = client.list_objects_v2().bucket(&c.bucket_name).prefix("");
 
         if let Some(ref token) = continuation_token {
             builder = builder.continuation_token(token);
@@ -62,7 +59,10 @@ async fn main() {
                 for obj in output.contents().iter() {
                     let key = obj.key().unwrap_or("(none)");
                     let size = obj.size().unwrap_or(0);
-                    let modified = obj.last_modified().map(|d| d.to_string()).unwrap_or_default();
+                    let modified = obj
+                        .last_modified()
+                        .map(|d| d.to_string())
+                        .unwrap_or_default();
                     println!("  {:<50} {:>10}  {}", key, size, modified);
                 }
                 if output.is_truncated() == Some(true) {
