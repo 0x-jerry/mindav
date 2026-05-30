@@ -19,3 +19,4 @@ md-5 = "0.10"
 bytes = "1"
 aws-smithy-types = "1"
 axum-auth = { version = "0.8", features = ["auth-basic"] }
+tower-http = { version = "0.6", features = ["trace"] }

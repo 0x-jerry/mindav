@@ -12,6 +12,7 @@ use axum::{
 use axum_auth::AuthBasic;
 use dav_server::fakels::FakeLs;
 use dav_server::DavHandler;
+use tower_http::trace::TraceLayer;
 
 #[derive(Clone)]
 struct AppState {
@@ -58,7 +59,8 @@ async fn main() {
     let app = Router::new()
         .route("/", any(handle_dav))
         .route("/{*path}", any(handle_dav))
-        .with_state(state);
+        .with_state(state)
+        .layer(TraceLayer::new_for_http());
 
     let addr = format!("0.0.0.0:{}", conf.app.port);
     tracing::info!("Starting server on {}", addr);

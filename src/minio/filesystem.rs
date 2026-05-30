@@ -51,7 +51,10 @@ impl MinioFs {
             .load()
             .await;
 
-        let client = Client::new(&config);
+        let s3_config = aws_sdk_s3::config::Builder::from(&config)
+            .force_path_style(true)
+            .build();
+        let client = Client::from_conf(s3_config);
 
         tracing::info!("Login to {}", endpoint);
 
@@ -146,7 +149,11 @@ impl MinioFs {
                     }
                 }
                 Err(e) => {
-                    tracing::error!("ListObjects failed: {}", e);
+                    tracing::error!(
+                        prefix = %key,
+                        error = ?e,
+                        "ListObjects failed"
+                    );
                     break;
                 }
             }
