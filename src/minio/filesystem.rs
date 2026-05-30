@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::SystemTime;
 
 use aws_sdk_s3::config::{Credentials, Region};
@@ -12,7 +10,6 @@ use dav_server::fs::{
     DavDirEntry, DavFile, DavFileSystem, DavMetaData, FsError, FsFuture, FsResult, FsStream,
     OpenOptions, ReadDirMeta,
 };
-use tokio::sync::RwLock;
 
 use crate::minio::dir::MinioDirEntry;
 
@@ -25,7 +22,6 @@ pub struct MinioFs {
     client: Client,
     bucket: String,
     upload_mode: String,
-    dirs: Arc<RwLock<HashMap<String, bool>>>,
 }
 
 fn datetime_to_systemtime(dt: &aws_smithy_types::DateTime) -> SystemTime {
@@ -64,7 +60,6 @@ impl MinioFs {
             client,
             bucket: bucket_name.to_string(),
             upload_mode: upload_mode.to_string(),
-            dirs: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -74,50 +69,23 @@ impl MinioFs {
     }
 
     async fn is_dir(&self, name: &str) -> bool {
-        {
-            let dirs = self.dirs.read().await;
-            if let Some(&val) = dirs.get(name) {
-                return val;
-            }
-        }
-
-        let key = name.trim_start_matches('/');
-        let resp = self
-            .client
-            .list_objects_v2()
-            .bucket(&self.bucket)
-            .prefix(key)
-            .delimiter("/".to_string())
-            .send()
-            .await;
-
-        let count = match resp {
-            Ok(output) => {
-                let common_prefixes = output.common_prefixes().len();
-                let contents = output
-                    .contents()
-                    .iter()
-                    .filter(|obj| {
-                        obj.key()
-                            .is_some_and(|k| k != key && k != format!("{}/", key))
-                    })
-                    .count();
-                common_prefixes + contents
-            }
-            Err(_) => 0,
+        let key = name;
+        let keep_path = if key.is_empty() {
+            KEEP_FILE_NAME.to_string()
+        } else {
+            format!("{}/{}", key, KEEP_FILE_NAME)
         };
 
-        let is_dir = count > 0;
-        {
-            let mut dirs = self.dirs.write().await;
-            dirs.insert(name.to_string(), is_dir);
-        }
-        is_dir
-    }
+        let is_dir = self
+            .client
+            .head_object()
+            .bucket(&self.bucket)
+            .key(&keep_path)
+            .send()
+            .await
+            .is_ok();
 
-    async fn reset_dir_check(&self, key_name: &str) {
-        let mut dirs = self.dirs.write().await;
-        dirs.retain(|k, _| !k.starts_with(key_name));
+        is_dir
     }
 
     async fn list_objects_by_prefix(&self, prefix: &str) -> Vec<aws_sdk_s3::types::Object> {
@@ -284,8 +252,6 @@ impl MinioFs {
             .send()
             .await;
 
-        self.reset_dir_check(name).await;
-
         Ok(())
     }
 }
@@ -362,7 +328,7 @@ impl DavFileSystem for MinioFs {
         Box::pin(async move {
             let name = Self::get_path(path);
 
-            if name.is_empty() || name == "/" || self.is_dir(&name).await {
+            if name.is_empty() || self.is_dir(&name).await {
                 return Ok(Box::new(MinioMetaData::new_dir(name)) as Box<dyn DavMetaData>);
             }
 
@@ -490,7 +456,6 @@ impl DavFileSystem for MinioFs {
                 }
             }
 
-            self.reset_dir_check(&old_name).await;
             let _ = self.remove_all(&old_name).await;
 
             tracing::info!("Rename success");
