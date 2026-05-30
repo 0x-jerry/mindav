@@ -265,6 +265,8 @@ impl DavFileSystem for MinioFs {
         Box::pin(async move {
             let name = Self::get_path(path);
 
+            tracing::info!("open file {}, opt {:?}", name, options);
+
             if options.write || options.create {
                 let metadata = MinioMetaData::new_dir(format!("{}", name));
                 let file = MinioFile::new_write(
@@ -318,6 +320,9 @@ impl DavFileSystem for MinioFs {
     ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         Box::pin(async move {
             let name = Self::get_path(path);
+
+            tracing::info!("open dir: {}", name);
+
             let entries = self.list_dir_entries(&name).await;
             let stream = futures_util::stream::iter(entries.into_iter().map(Ok));
             Ok(Box::pin(stream) as FsStream<Box<dyn DavDirEntry>>)
@@ -327,6 +332,8 @@ impl DavFileSystem for MinioFs {
     fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
         Box::pin(async move {
             let name = Self::get_path(path);
+
+            tracing::info!("metadata: {}", name);
 
             if name.is_empty() || self.is_dir(&name).await {
                 return Ok(Box::new(MinioMetaData::new_dir(name)) as Box<dyn DavMetaData>);
@@ -363,6 +370,8 @@ impl DavFileSystem for MinioFs {
     fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
             let name = Self::get_path(path);
+            tracing::info!("create dir: {}", name);
+
             let keep_path = if name.is_empty() {
                 KEEP_FILE_NAME.to_string()
             } else {
@@ -395,7 +404,8 @@ impl DavFileSystem for MinioFs {
 
     fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
-            let name = Self::get_path(path).trim_start_matches('/').to_string();
+            let name = Self::get_path(path);
+            tracing::info!("remove dir: {}", name);
             self.remove_all(&name).await
         })
     }
@@ -403,6 +413,7 @@ impl DavFileSystem for MinioFs {
     fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
         Box::pin(async move {
             let name = Self::get_path(path);
+            tracing::info!("remove file: {}", name);
             let result = self
                 .client
                 .delete_object()
@@ -468,6 +479,7 @@ impl DavFileSystem for MinioFs {
             let src_name = Self::get_path(from);
             let dst_name = Self::get_path(to);
 
+            tracing::info!("Copy: {} -> {}", src_name, dst_name);
             let objects = self.list_objects_by_prefix(&src_name).await;
 
             for obj in &objects {
