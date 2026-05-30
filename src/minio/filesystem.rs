@@ -69,7 +69,8 @@ impl MinioFs {
     }
 
     fn get_path(path: &DavPath) -> String {
-        path.as_url_string()
+        let path = path.to_string().trim_start_matches("/").to_string();
+        path
     }
 
     async fn is_dir(&self, name: &str) -> bool {
@@ -120,7 +121,7 @@ impl MinioFs {
     }
 
     async fn list_objects_by_prefix(&self, prefix: &str) -> Vec<aws_sdk_s3::types::Object> {
-        let key = prefix.trim_start_matches('/');
+        let key = prefix;
         let mut objects = Vec::new();
         let mut continuation_token: Option<String> = None;
 
@@ -222,7 +223,7 @@ impl DavFileSystem for MinioFs {
             let name = Self::get_path(path);
 
             if options.write || options.create {
-                let metadata = MinioMetaData::new_dir(format!("/{}", name));
+                let metadata = MinioMetaData::new_dir(format!("{}", name));
                 let file = MinioFile::new_write(
                     self.client.clone(),
                     self.bucket.clone(),
@@ -274,26 +275,21 @@ impl DavFileSystem for MinioFs {
     ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
         Box::pin(async move {
             let name = Self::get_path(path);
-            let prefix = name.trim_start_matches('/');
-            let prefix = if prefix.is_empty() {
-                String::new()
-            } else if prefix.ends_with('/') {
-                prefix.to_string()
-            } else {
-                format!("{}/", prefix)
-            };
 
-            let objects = self.list_objects_by_prefix(&prefix).await;
+            let objects = self.list_objects_by_prefix(&name).await;
             let mut entries: Vec<Box<dyn DavDirEntry>> = Vec::new();
 
             for obj in objects {
                 let k = obj.key().unwrap_or_default().to_string();
-                if k.is_empty() || k == KEEP_FILE_NAME {
+
+                if k == KEEP_FILE_NAME {
                     continue;
                 }
 
                 let is_dir_val =
                     obj.storage_class().is_none() && obj.e_tag().is_none() && obj.size() == Some(0);
+
+                tracing::info!("key: {}, is_dir {}", k, is_dir_val);
 
                 let entry = MinioDirEntry {
                     key: k,
