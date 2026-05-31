@@ -29,6 +29,21 @@ fn datetime_to_systemtime(dt: &aws_smithy_types::DateTime) -> SystemTime {
     std::time::UNIX_EPOCH + std::time::Duration::from_secs_f64(secs)
 }
 
+fn url_encode(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for &byte in s.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                result.push(byte as char);
+            }
+            _ => {
+                result.push_str(&format!("%{:02X}", byte));
+            }
+        }
+    }
+    result
+}
+
 impl MinioFs {
     pub async fn new(
         endpoint: &str,
@@ -210,7 +225,8 @@ impl MinioFs {
     }
 
     async fn remove_all(&self, name: &str) -> FsResult<()> {
-        let objects = self.list_objects_by_prefix(name).await;
+        let name = format!("{}/", name);
+        let objects = self.list_objects_by_prefix(&name).await;
 
         if !objects.is_empty() {
             let mut delete_objects: Vec<ObjectIdentifier> = Vec::new();
@@ -224,6 +240,8 @@ impl MinioFs {
                     );
                 }
             }
+
+            tracing::info!("delte objects: {:?}", delete_objects);
 
             let result = self
                 .client
@@ -244,13 +262,17 @@ impl MinioFs {
             }
         }
 
-        let _ = self
+        let result = self
             .client
             .delete_object()
             .bucket(&self.bucket)
-            .key(name)
+            .key(name.clone())
             .send()
             .await;
+
+        if let Err(e) = result {
+            tracing::error!("Delete object {} failed: {:?}", name, e);
+        }
 
         Ok(())
     }
@@ -442,32 +464,73 @@ impl DavFileSystem for MinioFs {
 
             tracing::info!("Rename: {} -> {}", old_name, new_name);
 
-            let objects = self.list_objects_by_prefix(&old_name).await;
+            let is_file = self
+                .client
+                .head_object()
+                .bucket(&self.bucket)
+                .key(&old_name)
+                .send()
+                .await
+                .is_ok();
+
+            if is_file {
+                let copy_source = url_encode(&format!("{}/{}", &self.bucket, &old_name));
+                self.client
+                    .copy_object()
+                    .bucket(&self.bucket)
+                    .copy_source(copy_source)
+                    .key(&new_name)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Rename copy failed: {}", e);
+                        FsError::GeneralFailure
+                    })?;
+
+                self.client
+                    .delete_object()
+                    .bucket(&self.bucket)
+                    .key(&old_name)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Rename delete failed: {}", e);
+                        FsError::GeneralFailure
+                    })?;
+
+                return Ok(());
+            }
+
+            let is_dir = self.is_dir(&old_name).await;
+            if !is_dir || old_name.is_empty() {
+                return Err(FsError::NotFound);
+            }
+
+            let prefix = format!("{}/", old_name);
+
+            let objects = self.list_objects_by_prefix(&prefix).await;
 
             for obj in &objects {
                 let old_key = obj.key().unwrap_or_default();
                 let new_key = old_key.replacen(&old_name, &new_name, 1);
 
-                let result = self
-                    .client
+                tracing::info!("COPY {} -> {}", old_key, new_key);
+
+                let copy_source = url_encode(&format!("{}/{}", &self.bucket, &old_key));
+                self.client
                     .copy_object()
                     .bucket(&self.bucket)
-                    .copy_source(format!("{}/{}", &self.bucket, old_key))
+                    .copy_source(copy_source)
                     .key(&new_key)
                     .send()
-                    .await;
-
-                match result {
-                    Ok(_) => {
-                        tracing::info!("Copy file success: {} -> {}", old_key, new_key);
-                    }
-                    Err(e) => {
-                        tracing::error!("Copy file failed: {}", e);
-                    }
-                }
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Rename copy failed for {}: {:?}", old_key, e);
+                        FsError::GeneralFailure
+                    })?;
             }
 
-            let _ = self.remove_all(&old_name).await;
+            self.remove_all(&old_name).await?;
 
             tracing::info!("Rename success");
             Ok(())
@@ -480,29 +543,58 @@ impl DavFileSystem for MinioFs {
             let dst_name = Self::get_path(to);
 
             tracing::info!("Copy: {} -> {}", src_name, dst_name);
-            let objects = self.list_objects_by_prefix(&src_name).await;
+
+            let is_file = self
+                .client
+                .head_object()
+                .bucket(&self.bucket)
+                .key(&src_name)
+                .send()
+                .await
+                .is_ok();
+
+            if is_file {
+                let copy_source = url_encode(&format!("{}/{}", &self.bucket, &src_name));
+                self.client
+                    .copy_object()
+                    .bucket(&self.bucket)
+                    .copy_source(copy_source)
+                    .key(&dst_name)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Copy failed: {}", e);
+                        FsError::GeneralFailure
+                    })?;
+
+                return Ok(());
+            }
+
+            let is_dir = self.is_dir(&src_name).await;
+            if !is_dir || src_name.is_empty() {
+                return Err(FsError::NotFound);
+            }
+
+            let prefix = format!("{}/", src_name);
+
+            let objects = self.list_objects_by_prefix(&prefix).await;
 
             for obj in &objects {
                 let old_key = obj.key().unwrap_or_default();
                 let new_key = old_key.replacen(&src_name, &dst_name, 1);
 
-                let result = self
-                    .client
+                let copy_source = url_encode(&format!("{}/{}", &self.bucket, old_key));
+                self.client
                     .copy_object()
                     .bucket(&self.bucket)
-                    .copy_source(format!("{}/{}", &self.bucket, old_key))
+                    .copy_source(copy_source)
                     .key(&new_key)
                     .send()
-                    .await;
-
-                match result {
-                    Ok(_) => {
-                        tracing::info!("Copy file success: {} -> {}", old_key, new_key);
-                    }
-                    Err(e) => {
-                        tracing::error!("Copy file failed: {}", e);
-                    }
-                }
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Copy failed for {}: {}", old_key, e);
+                        FsError::GeneralFailure
+                    })?;
             }
 
             tracing::info!("Copy success");
