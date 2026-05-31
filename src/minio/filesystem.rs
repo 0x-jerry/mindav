@@ -84,23 +84,22 @@ impl MinioFs {
     }
 
     async fn is_dir(&self, name: &str) -> bool {
-        let key = name;
-        let keep_path = if key.is_empty() {
-            KEEP_FILE_NAME.to_string()
-        } else {
-            format!("{}/{}", key, KEEP_FILE_NAME)
-        };
-
-        let is_dir = self
+        let result = self
             .client
-            .head_object()
+            .list_objects_v2()
             .bucket(&self.bucket)
-            .key(&keep_path)
+            .prefix(name)
+            .delimiter("/")
             .send()
-            .await
-            .is_ok();
+            .await;
 
-        is_dir
+        if let Ok(r) = result {
+            if r.key_count.unwrap_or_default() > 0 {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     async fn list_objects_by_prefix(&self, prefix: &str) -> Vec<aws_sdk_s3::types::Object> {
@@ -113,7 +112,8 @@ impl MinioFs {
                 .client
                 .list_objects_v2()
                 .bucket(&self.bucket)
-                .prefix(key);
+                .prefix(key)
+                .delimiter("/");
 
             if let Some(ref token) = continuation_token {
                 builder = builder.continuation_token(token);
@@ -225,23 +225,23 @@ impl MinioFs {
     }
 
     async fn remove_all(&self, name: &str) -> FsResult<()> {
-        let name = format!("{}/", name);
-        let objects = self.list_objects_by_prefix(&name).await;
+        if name.is_empty() {
+            tracing::error!("RemoveAll: not allowed to delete root");
+            return Err(FsError::GeneralFailure);
+        }
+
+        let prefix = format!("{}/", name);
+
+        tracing::info!("delete dir: {}", prefix);
+
+        let objects = self.list_objects_by_prefix(&prefix).await;
 
         if !objects.is_empty() {
-            let mut delete_objects: Vec<ObjectIdentifier> = Vec::new();
-            for obj in &objects {
-                if let Some(key) = obj.key() {
-                    delete_objects.push(
-                        ObjectIdentifier::builder()
-                            .key(key.to_string())
-                            .build()
-                            .unwrap(),
-                    );
-                }
-            }
-
-            tracing::info!("delte objects: {:?}", delete_objects);
+            let delete_objects: Vec<ObjectIdentifier> = objects
+                .iter()
+                .filter_map(|obj| obj.key().map(|k| k.to_string()))
+                .map(|key| ObjectIdentifier::builder().key(key).build().unwrap())
+                .collect();
 
             let result = self
                 .client
@@ -260,18 +260,6 @@ impl MinioFs {
                 tracing::error!("RemoveAll failed: {}", e);
                 return Err(FsError::GeneralFailure);
             }
-        }
-
-        let result = self
-            .client
-            .delete_object()
-            .bucket(&self.bucket)
-            .key(name.clone())
-            .send()
-            .await;
-
-        if let Err(e) = result {
-            tracing::error!("Delete object {} failed: {:?}", name, e);
         }
 
         Ok(())
