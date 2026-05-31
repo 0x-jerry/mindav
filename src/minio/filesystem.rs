@@ -84,11 +84,13 @@ impl MinioFs {
     }
 
     async fn is_dir(&self, name: &str) -> bool {
+        let prefix = format!("{}/", name);
+
         let result = self
             .client
             .list_objects_v2()
             .bucket(&self.bucket)
-            .prefix(name)
+            .prefix(prefix)
             .delimiter("/")
             .send()
             .await;

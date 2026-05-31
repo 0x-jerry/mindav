@@ -46,7 +46,7 @@ async fn main() {
 
     println!("Listing objects in bucket '{}':", c.bucket_name);
 
-    let result = client.list_objects_v2().bucket(&c.bucket_name).prefix("t (2026.5.31 10.16.22)").delimiter("/").send().await;
+    let result = client.list_objects_v2().bucket(&c.bucket_name).prefix("t/").delimiter("/").send().await;
 
     println!("result {:?}", result);
 
