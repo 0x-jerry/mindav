@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::minio::UploadMode;
 
 fn default_upload_mode() -> UploadMode {
-    UploadMode::File
+    UploadMode::Memory
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -67,7 +67,7 @@ impl Default for Config {
             app: AppSection {
                 port: "8080".to_string(),
                 accounts: vec![],
-                upload_mode: UploadMode::File,
+                upload_mode: UploadMode::Memory,
             },
             minio: MinioConfig {
                 endpoint: String::new(),

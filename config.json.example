@@ -5,7 +5,7 @@
             { "username": "alice", "password": "password1" },
             { "username": "bob", "password": "password2" }
         ],
-        "uploadMode": "file"
+        "uploadMode": "memory"
     },
     "minio": {
         "endpoint": "localhost:9000",

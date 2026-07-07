@@ -63,23 +63,24 @@ async fn init_bucket() {
         .await;
 }
 
-async fn create_test_fs() -> MinioFs {
+async fn create_test_fs(upload_mode: UploadMode) -> MinioFs {
     MinioFs::new(
         "localhost:9000",
         BUCKET,
         false,
         ACCESS_KEY,
         SECRET_KEY,
-        UploadMode::File,
+        upload_mode,
     )
     .await
 }
 
 async fn spawn_server(
     username: &str,
+    upload_mode: UploadMode,
 ) -> (reqwest_dav::Client, MinioFs, tokio::task::JoinHandle<()>) {
     init_bucket().await;
-    let fs = create_test_fs().await;
+    let fs = create_test_fs(upload_mode).await;
     let accounts = HashMap::from([(username.to_string(), TEST_PASSWORD.to_string())]);
     let router = app::build_router(fs.clone(), accounts);
 
@@ -113,7 +114,7 @@ async fn cleanup_user(fs: &MinioFs, username: &str) {
 async fn auth_invalid_password() {
     let username = next_username();
     init_bucket().await;
-    let fs = create_test_fs().await;
+    let fs = create_test_fs(UploadMode::File).await;
     let accounts = HashMap::from([(username.clone(), TEST_PASSWORD.to_string())]);
     let router = app::build_router(fs, accounts);
 
@@ -138,7 +139,7 @@ async fn auth_invalid_password() {
 async fn auth_missing_credentials() {
     let username = next_username();
     init_bucket().await;
-    let fs = create_test_fs().await;
+    let fs = create_test_fs(UploadMode::File).await;
     let accounts = HashMap::from([(username, TEST_PASSWORD.to_string())]);
     let router = app::build_router(fs, accounts);
 
@@ -162,7 +163,7 @@ async fn auth_missing_credentials() {
 #[tokio::test]
 async fn new_user_no_404() {
     let username = next_username();
-    let (client, fs, _handle) = spawn_server(&username).await;
+    let (client, fs, _handle) = spawn_server(&username, UploadMode::File).await;
 
     let entries = client.list("/", Depth::Number(1)).await.expect("list root");
     assert!(!entries.is_empty(), "new user root should have at least self directory");
@@ -173,7 +174,7 @@ async fn new_user_no_404() {
 #[tokio::test]
 async fn mkcol_and_list_directory() {
     let username = next_username();
-    let (client, fs, _handle) = spawn_server(&username).await;
+    let (client, fs, _handle) = spawn_server(&username, UploadMode::File).await;
 
     client.mkcol("/docs").await.expect("mkcol");
 
@@ -190,7 +191,7 @@ async fn mkcol_and_list_directory() {
 #[tokio::test]
 async fn put_and_get_file() {
     let username = next_username();
-    let (client, fs, _handle) = spawn_server(&username).await;
+    let (client, fs, _handle) = spawn_server(&username, UploadMode::File).await;
 
     let content = b"Hello, WebDAV E2E test!";
     client.put("/hello.txt", content.as_slice()).await.expect("put");
@@ -205,7 +206,7 @@ async fn put_and_get_file() {
 #[tokio::test]
 async fn delete_file() {
     let username = next_username();
-    let (client, fs, _handle) = spawn_server(&username).await;
+    let (client, fs, _handle) = spawn_server(&username, UploadMode::File).await;
 
     client
         .put("/tmp.txt", b"delete me".as_slice())
@@ -225,7 +226,7 @@ async fn delete_file() {
 #[tokio::test]
 async fn move_file() {
     let username = next_username();
-    let (client, fs, _handle) = spawn_server(&username).await;
+    let (client, fs, _handle) = spawn_server(&username, UploadMode::File).await;
 
     let content = b"move me please";
     client.put("/a.txt", content.as_slice()).await.expect("put");
@@ -248,7 +249,7 @@ async fn move_file() {
 #[tokio::test]
 async fn copy_file() {
     let username = next_username();
-    let (client, fs, _handle) = spawn_server(&username).await;
+    let (client, fs, _handle) = spawn_server(&username, UploadMode::File).await;
 
     let content = b"copy me please";
     client.put("/orig.txt", content.as_slice()).await.expect("put");
@@ -272,7 +273,7 @@ async fn namespace_isolation() {
     let bob_name = next_username();
     init_bucket().await;
 
-    let fs = create_test_fs().await;
+    let fs = create_test_fs(UploadMode::File).await;
     let accounts = HashMap::from([
         (alice_name.clone(), TEST_PASSWORD.to_string()),
         (bob_name.clone(), TEST_PASSWORD.to_string()),
@@ -312,4 +313,28 @@ async fn namespace_isolation() {
 
     cleanup_user(&fs, &alice_name).await;
     cleanup_user(&fs, &bob_name).await;
+}
+
+#[tokio::test]
+async fn upload_mode_memory_e2e() {
+    let username = next_username();
+    let (client, fs, _handle) = spawn_server(&username, UploadMode::Memory).await;
+
+    let content = b"uploaded in memory mode via WebDAV";
+    client.put("/mem.txt", content.as_slice()).await.expect("put");
+
+    let resp = client.get_raw("/mem.txt").await.expect("get_raw");
+    let body = resp.bytes().await.expect("read body");
+    assert_eq!(&body[..], content, "memory upload mode: GET body should match PUT content");
+
+    let entries = client.list("/", Depth::Number(1)).await.expect("list");
+    let has_mem = entries.iter().any(|e| match e {
+        ListEntity::File(f) => f.href.ends_with("/mem.txt") || f.href.ends_with("mem.txt"),
+        _ => false,
+    });
+    assert!(has_mem, "memory mode: listing should contain uploaded file");
+
+    client.delete("/mem.txt").await.expect("delete");
+
+    cleanup_user(&fs, &username).await;
 }
