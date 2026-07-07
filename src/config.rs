@@ -7,14 +7,12 @@ fn default_upload_mode() -> UploadMode {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MinioConfig {
     pub endpoint: String,
-    #[serde(rename = "bucketName")]
     pub bucket_name: String,
     pub ssl: bool,
-    #[serde(rename = "accessKey")]
     pub access_key: String,
-    #[serde(rename = "secretAccessKey")]
     pub secret_access_key: String,
 }
 
@@ -25,11 +23,12 @@ pub struct AccountConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSection {
     pub port: String,
     #[serde(default)]
     pub accounts: Vec<AccountConfig>,
-    #[serde(rename = "uploadMode", default = "default_upload_mode")]
+    #[serde(default = "default_upload_mode")]
     pub upload_mode: UploadMode,
 }
 
