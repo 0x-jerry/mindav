@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use mindav::app;
-use mindav::minio::{MinioFs, UploadMode};
+use mindav::minio::{MinioFs, MinioFsConfig, UploadMode};
 use reqwest_dav::{Auth, ClientBuilder, Depth};
 use reqwest_dav::types::list_cmd::ListEntity;
 use tokio::sync::OnceCell;
@@ -64,14 +64,14 @@ async fn init_bucket() {
 }
 
 async fn create_test_fs(upload_mode: UploadMode) -> MinioFs {
-    MinioFs::new(
-        "localhost:9000",
-        BUCKET,
-        false,
-        ACCESS_KEY,
-        SECRET_KEY,
+    MinioFs::new(&MinioFsConfig {
+        endpoint: "localhost:9000".into(),
+        bucket_name: BUCKET.into(),
+        ssl: false,
+        access_key: ACCESS_KEY.into(),
+        secret_access_key: SECRET_KEY.into(),
         upload_mode,
-    )
+    })
     .await
 }
 

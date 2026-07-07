@@ -14,3 +14,13 @@ pub enum UploadMode {
     Memory,
     File,
 }
+
+#[derive(Debug, Clone)]
+pub struct MinioFsConfig {
+    pub endpoint: String,
+    pub bucket_name: String,
+    pub ssl: bool,
+    pub access_key: String,
+    pub secret_access_key: String,
+    pub upload_mode: UploadMode,
+}

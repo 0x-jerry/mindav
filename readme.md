@@ -53,3 +53,21 @@ For hot-reload during development:
 cargo install cargo-watch
 cargo watch -x run
 ```
+
+## Testing
+
+### Prerequisites
+
+Start a local S3-compatible server for integration tests:
+
+```sh
+docker compose up -d s3
+```
+
+This runs [rustfs](https://github.com/rustfs/rustfs) on `localhost:9000` (`rustfsadmin`/`rustfsadmin`). Stop it with `docker compose down` when done.
+
+### Run tests
+
+```sh
+cargo test
+```

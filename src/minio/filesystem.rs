@@ -45,26 +45,26 @@ fn url_encode(s: &str) -> String {
 }
 
 impl MinioFs {
-    pub async fn new(
-        endpoint: &str,
-        bucket_name: &str,
-        ssl: bool,
-        access_key: &str,
-        secret_access_key: &str,
-        upload_mode: UploadMode,
-    ) -> Self {
-        let scheme = if ssl { "https" } else { "http" };
-        let endpoint_url = format!("{}://{}", scheme, endpoint);
+    pub async fn new(config: &super::MinioFsConfig) -> Self {
+        let scheme = if config.ssl { "https" } else { "http" };
+        let endpoint_url = format!("{}://{}", scheme, config.endpoint);
+        let endpoint = config.endpoint.clone();
 
-        let credentials = Credentials::new(access_key, secret_access_key, None, None, "mindav");
-        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        let credentials = Credentials::new(
+            &config.access_key,
+            &config.secret_access_key,
+            None,
+            None,
+            "mindav",
+        );
+        let aws_cfg = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(Region::new("us-east-1"))
             .endpoint_url(&endpoint_url)
             .credentials_provider(credentials)
             .load()
             .await;
 
-        let s3_config = aws_sdk_s3::config::Builder::from(&config)
+        let s3_config = aws_sdk_s3::config::Builder::from(&aws_cfg)
             .force_path_style(true)
             .build();
         let client = Client::from_conf(s3_config);
@@ -73,8 +73,8 @@ impl MinioFs {
 
         MinioFs {
             client,
-            bucket: bucket_name.to_string(),
-            upload_mode,
+            bucket: config.bucket_name.clone(),
+            upload_mode: config.upload_mode.clone(),
         }
     }
 

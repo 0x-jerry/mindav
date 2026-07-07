@@ -14,14 +14,14 @@ async fn main() {
 
     let conf = config::Config::load();
 
-    let fs = mindav::minio::MinioFs::new(
-        &conf.minio.endpoint,
-        &conf.minio.bucket_name,
-        conf.minio.ssl,
-        &conf.minio.access_key,
-        &conf.minio.secret_access_key,
-        conf.app.upload_mode.clone(),
-    )
+    let fs = mindav::minio::MinioFs::new(&mindav::minio::MinioFsConfig {
+        endpoint: conf.minio.endpoint,
+        bucket_name: conf.minio.bucket_name,
+        ssl: conf.minio.ssl,
+        access_key: conf.minio.access_key,
+        secret_access_key: conf.minio.secret_access_key,
+        upload_mode: conf.app.upload_mode.clone(),
+    })
     .await;
 
     let mut accounts: HashMap<String, String> = HashMap::new();
