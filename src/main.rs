@@ -1,9 +1,11 @@
 mod config;
 mod minio;
 
+use std::collections::HashMap;
+
 use axum::{
     extract::{Request, State},
-    http::StatusCode,
+    http::{StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::any,
     Router,
@@ -16,8 +18,7 @@ use tower_http::trace::TraceLayer;
 #[derive(Clone)]
 struct AppState {
     dav: DavHandler,
-    admin_name: String,
-    admin_password: String,
+    accounts: HashMap<String, String>,
 }
 
 #[tokio::main]
@@ -47,13 +48,13 @@ async fn main() {
         .strip_prefix("/")
         .build_handler();
 
-    tracing::info!("Auth accounts: {}:******", conf.app.admin.username);
+    let mut accounts: HashMap<String, String> = HashMap::new();
+    for account in &conf.app.accounts {
+        tracing::info!("Auth account: {}:******", account.username);
+        accounts.insert(account.username.clone(), account.password.clone());
+    }
 
-    let state = AppState {
-        dav,
-        admin_name: conf.app.admin.username.clone(),
-        admin_password: conf.app.admin.password.clone(),
-    };
+    let state = AppState { dav, accounts };
 
     let app = Router::new()
         .route("/", any(handle_dav))
@@ -68,18 +69,37 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn handle_dav(State(state): State<AppState>, auth: AuthBasic, req: Request) -> Response {
+async fn handle_dav(State(state): State<AppState>, auth: AuthBasic, mut req: Request) -> Response {
     let AuthBasic((user, pass)) = auth;
-    if user == state.admin_name && pass.as_deref() == Some(&state.admin_password) {
-        let resp = state.dav.handle(req).await;
-        let (parts, body) = resp.into_parts();
-        let body = axum::body::Body::new(body);
-        Response::from_parts(parts, body)
-    } else {
-        (
+
+    let authorized = state
+        .accounts
+        .get(&user)
+        .map(|expected| pass.as_deref() == Some(expected))
+        .unwrap_or(false);
+
+    if !authorized {
+        return (
             StatusCode::UNAUTHORIZED,
             [("WWW-Authenticate", "Basic realm=\"mindav\"")],
         )
-            .into_response()
+            .into_response();
     }
+
+    let path = req.uri().path().to_string();
+    let new_path = format!("/{}{}", user, path);
+
+    let new_path_and_query = if let Some(query) = req.uri().query() {
+        format!("{}?{}", new_path, query)
+    } else {
+        new_path
+    };
+    let mut parts = req.uri().clone().into_parts();
+    parts.path_and_query = Some(new_path_and_query.parse().unwrap());
+    *req.uri_mut() = Uri::from_parts(parts).unwrap();
+
+    let resp = state.dav.handle(req).await;
+    let (parts, body) = resp.into_parts();
+    let body = axum::body::Body::new(body);
+    Response::from_parts(parts, body)
 }

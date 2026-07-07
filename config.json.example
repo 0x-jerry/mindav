@@ -1,10 +1,10 @@
 {
     "app": {
         "port": "8080",
-        "admin": {
-            "username": "admin",
-            "password": "password"
-        },
+        "accounts": [
+            { "username": "alice", "password": "password1" },
+            { "username": "bob", "password": "password2" }
+        ],
         "uploadMode": "file"
     },
     "minio": {

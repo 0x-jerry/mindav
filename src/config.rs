@@ -13,7 +13,7 @@ pub struct MinioConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct AdminConfig {
+pub struct AccountConfig {
     pub username: String,
     pub password: String,
 }
@@ -21,7 +21,8 @@ pub struct AdminConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppSection {
     pub port: String,
-    pub admin: AdminConfig,
+    #[serde(default)]
+    pub accounts: Vec<AccountConfig>,
     #[serde(rename = "uploadMode")]
     pub upload_mode: String,
 }
@@ -48,12 +49,6 @@ impl Config {
         if config.app.port.is_empty() {
             config.app.port = "8080".to_string();
         }
-        if config.app.admin.username.is_empty() {
-            config.app.admin.username = "admin".to_string();
-        }
-        if config.app.admin.password.is_empty() {
-            config.app.admin.password = "password".to_string();
-        }
         if config.app.upload_mode.is_empty() {
             config.app.upload_mode = "file".to_string();
         }
@@ -68,10 +63,7 @@ impl Default for Config {
         Config {
             app: AppSection {
                 port: "8080".to_string(),
-                admin: AdminConfig {
-                    username: "admin".to_string(),
-                    password: "password".to_string(),
-                },
+                accounts: vec![],
                 upload_mode: "file".to_string(),
             },
             minio: MinioConfig {
