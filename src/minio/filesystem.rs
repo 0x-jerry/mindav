@@ -15,13 +15,13 @@ use crate::minio::dir::MinioDirEntry;
 
 use super::file::MinioFile;
 use super::fileinfo::MinioMetaData;
-use super::{KEEP_FILE_CONTENT_TYPE, KEEP_FILE_NAME};
+use super::{KEEP_FILE_CONTENT_TYPE, KEEP_FILE_NAME, UploadMode};
 
 #[derive(Clone)]
 pub struct MinioFs {
     client: Client,
     bucket: String,
-    upload_mode: String,
+    upload_mode: UploadMode,
 }
 
 fn datetime_to_systemtime(dt: &aws_smithy_types::DateTime) -> SystemTime {
@@ -51,7 +51,7 @@ impl MinioFs {
         ssl: bool,
         access_key: &str,
         secret_access_key: &str,
-        upload_mode: &str,
+        upload_mode: UploadMode,
     ) -> Self {
         let scheme = if ssl { "https" } else { "http" };
         let endpoint_url = format!("{}://{}", scheme, endpoint);
@@ -74,7 +74,7 @@ impl MinioFs {
         MinioFs {
             client,
             bucket: bucket_name.to_string(),
-            upload_mode: upload_mode.to_string(),
+            upload_mode,
         }
     }
 
@@ -114,8 +114,7 @@ impl MinioFs {
                 .client
                 .list_objects_v2()
                 .bucket(&self.bucket)
-                .prefix(key)
-                .delimiter("/");
+                .prefix(key);
 
             if let Some(ref token) = continuation_token {
                 builder = builder.continuation_token(token);

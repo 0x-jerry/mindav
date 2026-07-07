@@ -1,5 +1,11 @@
 use serde::Deserialize;
 
+use crate::minio::UploadMode;
+
+fn default_upload_mode() -> UploadMode {
+    UploadMode::File
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MinioConfig {
     pub endpoint: String,
@@ -23,8 +29,8 @@ pub struct AppSection {
     pub port: String,
     #[serde(default)]
     pub accounts: Vec<AccountConfig>,
-    #[serde(rename = "uploadMode")]
-    pub upload_mode: String,
+    #[serde(rename = "uploadMode", default = "default_upload_mode")]
+    pub upload_mode: UploadMode,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -49,9 +55,6 @@ impl Config {
         if config.app.port.is_empty() {
             config.app.port = "8080".to_string();
         }
-        if config.app.upload_mode.is_empty() {
-            config.app.upload_mode = "file".to_string();
-        }
 
         tracing::info!("Loaded config: {:?}", config);
         config
@@ -64,7 +67,7 @@ impl Default for Config {
             app: AppSection {
                 port: "8080".to_string(),
                 accounts: vec![],
-                upload_mode: "file".to_string(),
+                upload_mode: UploadMode::File,
             },
             minio: MinioConfig {
                 endpoint: String::new(),

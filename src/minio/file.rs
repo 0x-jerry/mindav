@@ -7,13 +7,14 @@ use dav_server::fs::{DavFile, DavMetaData, FsFuture, FsResult};
 use md5::{Digest, Md5};
 
 use super::fileinfo::MinioMetaData;
+use super::UploadMode;
 
 #[derive(Debug)]
 pub struct MinioFile {
     client: aws_sdk_s3::Client,
     bucket: String,
     name: String,
-    upload_mode: String,
+    upload_mode: UploadMode,
     data: Vec<u8>,
     pos: u64,
     write_buf: Vec<u8>,
@@ -26,7 +27,7 @@ impl MinioFile {
         client: aws_sdk_s3::Client,
         bucket: String,
         name: String,
-        upload_mode: String,
+        upload_mode: UploadMode,
         metadata: MinioMetaData,
     ) -> FsResult<Self> {
         let result = client.get_object().bucket(&bucket).key(&name).send().await;
@@ -58,7 +59,7 @@ impl MinioFile {
         client: aws_sdk_s3::Client,
         bucket: String,
         name: String,
-        upload_mode: String,
+        upload_mode: UploadMode,
         metadata: MinioMetaData,
     ) -> Self {
         MinioFile {
@@ -131,46 +132,49 @@ impl DavFile for MinioFile {
         let data = std::mem::take(&mut self.write_buf);
 
         Box::pin(async move {
-            if upload_mode == "memory" {
-                let body = ByteStream::from(data);
-                client
-                    .put_object()
-                    .bucket(&bucket)
-                    .key(&name)
-                    .body(body)
-                    .content_type("application/octet-stream")
-                    .send()
-                    .await
-                    .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
-            } else {
-                let md5_hash = format!("{:x}", Md5::digest(name.as_bytes()));
-                let tmp_dir = Path::new("./tmp");
-                tokio::fs::create_dir_all(tmp_dir)
-                    .await
-                    .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
+            match upload_mode {
+                UploadMode::Memory => {
+                    let body = ByteStream::from(data);
+                    client
+                        .put_object()
+                        .bucket(&bucket)
+                        .key(&name)
+                        .body(body)
+                        .content_type("application/octet-stream")
+                        .send()
+                        .await
+                        .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
+                }
+                UploadMode::File => {
+                    let md5_hash = format!("{:x}", Md5::digest(name.as_bytes()));
+                    let tmp_dir = Path::new("./tmp");
+                    tokio::fs::create_dir_all(tmp_dir)
+                        .await
+                        .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
 
-                let tmp_path = tmp_dir.join(&md5_hash);
+                    let tmp_path = tmp_dir.join(&md5_hash);
 
-                tokio::fs::write(&tmp_path, &data)
-                    .await
-                    .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
+                    tokio::fs::write(&tmp_path, &data)
+                        .await
+                        .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
 
-                let body = ByteStream::from_path(&tmp_path)
-                    .await
-                    .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
+                    let body = ByteStream::from_path(&tmp_path)
+                        .await
+                        .map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
 
-                let result = client
-                    .put_object()
-                    .bucket(&bucket)
-                    .key(&name)
-                    .body(body)
-                    .content_type("application/octet-stream")
-                    .send()
-                    .await;
+                    let result = client
+                        .put_object()
+                        .bucket(&bucket)
+                        .key(&name)
+                        .body(body)
+                        .content_type("application/octet-stream")
+                        .send()
+                        .await;
 
-                let _ = tokio::fs::remove_file(&tmp_path).await;
+                    let _ = tokio::fs::remove_file(&tmp_path).await;
 
-                result.map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
+                    result.map_err(|_| dav_server::fs::FsError::GeneralFailure)?;
+                }
             }
 
             Ok(())

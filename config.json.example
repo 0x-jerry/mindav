@@ -8,10 +8,10 @@
         "uploadMode": "file"
     },
     "minio": {
-        "endpoint": "web.server.com",
-        "ssl": true,
-        "bucketName": "webdav",
-        "accessKey": "accessKey",
-        "secretAccessKey": "secretAccessKey"
+        "endpoint": "localhost:9000",
+        "ssl": false,
+        "bucketName": "test",
+        "accessKey": "rustfsadmin",
+        "secretAccessKey": "rustfsadmin"
     }
 }

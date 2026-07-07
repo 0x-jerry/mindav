@@ -23,3 +23,5 @@ tmp
 
 config.json
 target
+
+s3-data

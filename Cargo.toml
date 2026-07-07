@@ -20,3 +20,10 @@ bytes = "1"
 aws-smithy-types = "1"
 axum-auth = { version = "0.8", features = ["auth-basic"] }
 tower-http = { version = "0.6", features = ["trace"] }
+
+[dev-dependencies]
+aws-sdk-s3 = "1"
+aws-config = "1"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+reqwest_dav = "0.3"
