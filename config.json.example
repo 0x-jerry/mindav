@@ -1,17 +1,17 @@
 {
-    "app": {
-        "port": "8080",
-        "accounts": [
-            { "username": "alice", "password": "password1" },
-            { "username": "bob", "password": "password2" }
-        ],
-        "uploadMode": "memory"
-    },
-    "minio": {
-        "endpoint": "localhost:9000",
-        "ssl": false,
-        "bucketName": "test",
-        "accessKey": "rustfsadmin",
-        "secretAccessKey": "rustfsadmin"
-    }
+  "app": {
+    "port": "8080",
+    "accounts": [
+      { "username": "alice", "password": "password1" },
+      { "username": "bob", "password": "password2" }
+    ],
+    "uploadMode": "memory"
+  },
+  "minio": {
+    "endpoint": "localhost:9000",
+    "ssl": false,
+    "bucketName": "test",
+    "accessKey": "rustfsadmin",
+    "secretAccessKey": "rustfsadmin"
+  }
 }

@@ -25,18 +25,18 @@ services:
 {
   "app": {
     "port": "8080",
-    "admin": {
-      "username": "admin",
-      "password": "password"
-    },
-    "uploadMode": "file"
+    "accounts": [
+      { "username": "alice", "password": "password1" },
+      { "username": "bob", "password": "password2" }
+    ],
+    "uploadMode": "memory"
   },
   "minio": {
-    "endpoint": "web.server.com",
-    "ssl": true,
-    "bucketName": "webdav",
-    "accessKey": "accessKey",
-    "secretAccessKey": "secretAccessKey"
+    "endpoint": "localhost:9000",
+    "ssl": false,
+    "bucketName": "test",
+    "accessKey": "rustfsadmin",
+    "secretAccessKey": "rustfsadmin"
   }
 }
 ```
